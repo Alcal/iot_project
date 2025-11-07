@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Serverboy Viewer</title>
+    <style>
+      body { margin: 0; background: #111; color: #eee; font-family: system-ui, sans-serif; }
+      .wrap { display: flex; gap: 16px; padding: 16px; align-items: flex-start; }
+      canvas { image-rendering: pixelated; image-rendering: crisp-edges; background: #000; }
+      .controls { display: grid; gap: 8px; }
+      button { padding: 8px 12px; background: #333; color: #eee; border: 1px solid #444; border-radius: 6px; cursor: pointer; }
+      button:active { transform: translateY(1px); }
+      .grid { display: grid; grid-template-columns: repeat(3, 48px); gap: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <canvas id="screen" width="160" height="144"></canvas>
+      <div class="controls">
+        <div>
+          <div class="grid">
+            <button data-k="UP">UP</button>
+            <button data-k="A">A</button>
+            <button data-k="B">B</button>
+            <button data-k="LEFT">LEFT</button>
+            <button data-k="DOWN">DOWN</button>
+            <button data-k="RIGHT">RIGHT</button>
+          </div>
+        </div>
+        <div>
+          <button id="start">START</button>
+          <button id="select">SELECT</button>
+          <button id="restart">RESTART</button>
+        </div>
+      </div>
+    </div>
+    <button id="enable-audio" style="position:fixed;top:8px;right:8px;">Enable Audio</button>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+    <script>
+      const socket = io();
+      const canvas = document.getElementById('screen');
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(160, 144);
+
+      socket.on('frame', (screen) => {
+        for (let i = 0; i < screen.length; i++) imageData.data[i] = screen[i];
+        ctx.putImageData(imageData, 0, 0);
+      });
+
+      function sendKey(ev, down) {
+        const k = ev.target.getAttribute('data-k');
+        if (!k) return;
+        socket.emit(down ? 'keydown' : 'keyup', { key: k });
+      }
+
+      document.querySelectorAll('button[data-k]').forEach((btn) => {
+        btn.addEventListener('mousedown', (e) => sendKey(e, true));
+        btn.addEventListener('mouseup', (e) => sendKey(e, false));
+        btn.addEventListener('mouseleave', (e) => sendKey(e, false));
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); sendKey({ target: btn }, true); });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); sendKey({ target: btn }, false); });
+      });
+
+      document.getElementById('start').addEventListener('click', () => socket.emit('keydown', { key: 'START' }));
+      document.getElementById('select').addEventListener('click', () => socket.emit('keydown', { key: 'SELECT' }));
+      document.getElementById('restart').addEventListener('click', () => socket.emit('restart'));
+
+      const keymap = { ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT', KeyZ: 'A', KeyX: 'B', Enter: 'START', ShiftLeft: 'SELECT' };
+      window.addEventListener('keydown', (e) => { const k = keymap[e.code]; if (k) { e.preventDefault(); socket.emit('keydown', { key: k }); } });
+      window.addEventListener('keyup', (e) => { const k = keymap[e.code]; if (k) { e.preventDefault(); socket.emit('keyup', { key: k }); } });
+
+      // ---- Audio (WebAudio with AudioWorklet fallback) ----
+      let audioCtx = null;
+      let workletNode = null;
+      let procNode = null; // fallback
+      const audioQueue = []; // fallback buffer
+      const TARGET_SR = 44100;
+
+      async function ensureAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_SR });
+        try {
+          await audioCtx.audioWorklet.addModule('audio-worklet.js');
+          workletNode = new AudioWorkletNode(audioCtx, 'queue-player', { numberOfOutputs: 1, outputChannelCount: [1] });
+          workletNode.connect(audioCtx.destination);
+        } catch (_) {
+          // Fallback to ScriptProcessor if AudioWorklet is unavailable
+          procNode = audioCtx.createScriptProcessor(2048, 0, 1);
+          procNode.onaudioprocess = (e) => {
+            const out = e.outputBuffer.getChannelData(0);
+            let i = 0;
+            while (i < out.length) {
+              if (audioQueue.length === 0) { out.fill(0, i); break; }
+              const chunk = audioQueue[0];
+              const avail = Math.min(out.length - i, chunk.length);
+              out.set(chunk.subarray(0, avail), i);
+              i += avail;
+              if (avail === chunk.length) audioQueue.shift();
+              else audioQueue[0] = chunk.subarray(avail);
+            }
+          };
+          procNode.connect(audioCtx.destination);
+        }
+      }
+
+      document.getElementById('enable-audio').addEventListener('click', async () => {
+        ensureAudio();
+        try { await audioCtx.resume(); } catch (_) {}
+        document.getElementById('enable-audio').style.display = 'none';
+      });
+
+      socket.on('audio', (samples) => {
+        // Expect either Float32Array or plain number[]
+        const f32 = (samples instanceof Float32Array)
+          ? samples
+          : Float32Array.from(samples, x => {
+              const v = Number(x);
+              return isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
+            });
+        if (workletNode && workletNode.port) {
+          try { workletNode.port.postMessage({ buffer: f32.buffer }, [f32.buffer]); } catch (_) {}
+        } else {
+          audioQueue.push(f32);
+        }
+      });
+    </script>
+  </body>
+  </html>
+
+
