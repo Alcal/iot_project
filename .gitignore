@@ -1,0 +1,73 @@
+# General
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+game-server/.env
+game-server/.env.*
+!game-server/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+game-server/npm-debug.log*
+game-server/yarn-debug.log*
+game-server/yarn-error.log*
+game-server/pnpm-debug.log*
+
+# Node (game-server)
+game-server/node_modules/
+
+# Coverage
+coverage/
+
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Flutter build outputs (any platform)
+**/build/
+
+# Android
+**/android/local.properties
+**/.gradle/
+**/android/**/captures/
+
+# iOS
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Pods/
+**/ios/.symlinks/
+
+# macOS
+**/macos/Flutter/ephemeral/
+
+# Linux
+**/linux/flutter/ephemeral/
+
+# Windows
+**/windows/flutter/ephemeral/
+
+# Web
+**/web/.sass-cache/
+
