@@ -1,16 +1,38 @@
 # mqtt_sandbox
 
-A new Flutter project.
+Serverboy MQTT viewer built with Flutter.
 
-## Getting Started
+## Environment configuration (HiveMQ compatible)
 
-This project is a starting point for a Flutter application.
+The app reads connection settings from an environment JSON file located at `assets/env.json` (can be overridden). Keys mirror the Node game-server params:
 
-A few resources to get you started if this is your first Flutter project:
+- `MQTT_HOST`
+- `MQTT_PORT`
+- `MQTT_USERNAME`
+- `MQTT_PASSWORD`
+- `MQTT_PREFIX` (default `serverboy`)
+- `MQTT_TLS` (optional; if omitted, TLS is inferred as `port == 8883`)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+To use a different env file, pass `--dart-define=ENV_FILE=assets/env.prod.json` and include that file in assets.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Run (Android/iOS/desktop)
+
+1) Edit `assets/env.json` with your HiveMQ cluster values and run:
+
+```bash
+flutter run
+```
+
+2) Or provide an alternate env file (remember to add it to `pubspec.yaml` assets):
+
+```bash
+flutter run --dart-define=ENV_FILE=assets/env.prod.json
+```
+
+### Run (Web)
+
+```bash
+flutter run -d chrome
+```
+
+You can still override settings at runtime via the in-app Settings dialog.

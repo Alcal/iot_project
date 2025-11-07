@@ -1,11 +1,13 @@
 'use strict';
 
 const mqtt = require('mqtt');
+const { publishMeta, publishHealth, publishFrame } = require('./mqttPublishers');
+const { handleInputKeydown, handleInputKeyup, handleControlRestart } = require('./mqttConsumers');
 
 function createMqttClient(emulator) {
   // Build connection parameters from environment variables with sensible defaults
   // Backward compatible: if MQTT_URL is provided, it takes precedence
-  var options = {
+  const options = {
     host: process.env.MQTT_HOST,
     port: process.env.MQTT_PORT,
     protocol: 'mqtts',
@@ -28,13 +30,9 @@ const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
     });
 
     // Publish metadata once on connect
-    const meta = {
-      width: 160,
-      height: 144,
-      format: 'rgba8888',
-    };
-    client.publish(`${prefix}/meta`, JSON.stringify(meta), { qos: 0, retain: shouldRetainMeta });
-    client.publish(`${prefix}/health`, JSON.stringify({ ok: true, ts: Date.now() }), { qos: 0, retain: false });
+    const meta = { width: 160, height: 144, format: 'rgba8888' };
+    publishMeta(client, prefix, meta, shouldRetainMeta);
+    publishHealth(client, prefix, { ok: true, ts: Date.now() });
   });
 
   client.on('error', (err) => {
@@ -45,17 +43,15 @@ const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
     try {
       const payload = payloadBuffer ? String(payloadBuffer) : '';
       if (topic.endsWith('/input/keydown')) {
-        const key = (payload || '').toUpperCase();
-        if (key) emulator.handleKeyDown(key);
+        handleInputKeydown(emulator, payload);
         return;
       }
       if (topic.endsWith('/input/keyup')) {
-        const key = (payload || '').toUpperCase();
-        if (key) emulator.handleKeyUp(key);
+        handleInputKeyup(emulator, payload);
         return;
       }
       if (topic.endsWith('/control/restart')) {
-        emulator.restart();
+        handleControlRestart(emulator);
         return;
       }
     } catch (err) {
@@ -63,11 +59,8 @@ const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
     }
   });
 
-  function publishFrame(screen) {
-    if (!client || !client.connected || !screen) return;
-    // screen is a typed array of RGBA bytes; publish as binary
-    const buf = Buffer.isBuffer(screen) ? screen : Buffer.from(screen);
-    client.publish(`${prefix}/frame`, buf, { qos: 0, retain: false });
+  function publishFrameBound(screen) {
+    publishFrame(client, prefix, screen);
   }
 
   function close() {
@@ -76,7 +69,7 @@ const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
     } catch (_) {}
   }
 
-  return { client, publishFrame, close };
+  return { client, publishFrame: publishFrameBound, close };
 }
 
 module.exports = { createMqttClient };

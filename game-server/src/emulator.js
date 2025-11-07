@@ -6,6 +6,7 @@ let gameboy = null;
 let romBuffer = null;
 let sram = [];
 const keysHeld = new Set();
+let heldKey = null;
 
 function initEmulator(buffer, initialSram) {
   romBuffer = buffer;
@@ -22,7 +23,7 @@ function restart() {
 
 function handleKeyDown(key) {
   if (!key) return;
-  keysHeld.add(String(key).toUpperCase());
+  heldKey = parseInt(key);
 }
 
 function handleKeyUp(key) {
@@ -37,8 +38,9 @@ function startLoop(onFrame) {
     try {
       if (!gameboy) return setTimeout(tick, 5);
 
-      if (keysHeld.size > 0) {
-        gameboy.pressKeys(Array.from(keysHeld));
+      if (heldKey !== null) {
+        gameboy.pressKey(heldKey);
+        heldKey = null;
       }
 
       const screen = gameboy.doFrame();
