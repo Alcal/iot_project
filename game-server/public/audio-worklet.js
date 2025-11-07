@@ -2,11 +2,21 @@ class QueuePlayerProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.queue = [];
+    this.totalQueued = 0; // total samples queued
+    this.maxQueued = Math.floor(sampleRate * 0.5); // cap ~500ms
     this.port.onmessage = (e) => {
       try {
         const buf = e.data && e.data.buffer;
-        if (buf) this.queue.push(new Float32Array(buf));
-      } catch (_) {}
+        if (buf) {
+          const chunk = new Float32Array(buf);
+          this.queue.push(chunk);
+          this.totalQueued += chunk.length;
+          while (this.totalQueued > this.maxQueued && this.queue.length > 1) {
+            const oldest = this.queue.shift();
+            this.totalQueued -= oldest.length;
+          }
+        }
+      } catch (err) { console.warn('[serverboy][audio] Error processing message from AudioWorklet:', err); }
     };
   }
 
@@ -27,8 +37,10 @@ class QueuePlayerProcessor extends AudioWorkletProcessor {
       i += avail;
       if (avail === chunk.length) {
         this.queue.shift();
+        this.totalQueued -= avail;
       } else {
         this.queue[0] = chunk.subarray(avail);
+        this.totalQueued -= avail;
       }
     }
     return true;

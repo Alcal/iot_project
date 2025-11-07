@@ -1,5 +1,8 @@
 'use strict';
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+
 const { resolveRomPath, loadRomBuffer } = require('./src/rom');
 const { createServer } = require('./src/createServer');
 const emulator = require('./src/emulator');
@@ -35,7 +38,7 @@ const { httpServer, io } = createServer();
     } catch (_) {}
     
     if (mqttClient && typeof mqttClient.publishFrame === 'function') {
-      mqttClient.publishFrame(screen);
+      // mqttClient.publishFrame(screen);
     }
   });
 })();

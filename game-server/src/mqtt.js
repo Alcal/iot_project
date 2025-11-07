@@ -5,35 +5,21 @@ const mqtt = require('mqtt');
 function createMqttClient(emulator) {
   // Build connection parameters from environment variables with sensible defaults
   // Backward compatible: if MQTT_URL is provided, it takes precedence
-  const envHost = process.env.MQTT_HOST;
-  const envPort = process.env.MQTT_PORT ? Number(process.env.MQTT_PORT) : undefined;
-  const envProtocol = process.env.MQTT_PROTOCOL;
-  const envUsername = process.env.MQTT_USERNAME;
-  const envPassword = process.env.MQTT_PASSWORD;
+  var options = {
+    host: process.env.MQTT_HOST,
+    port: process.env.MQTT_PORT,
+    protocol: 'mqtts',
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD
+}
 
-  let url = process.env.MQTT_URL;
-  if (!url) {
-    const protocol = envProtocol || 'mqtt';
-    const host = envHost || 'localhost';
-    const defaultPort = (protocol === 'mqtts' || protocol === 'wss') ? 8883 : 1883;
-    const port = typeof envPort === 'number' ? envPort : defaultPort;
-    url = `${protocol}://${host}:${port}`;
-  }
-  const prefix = (process.env.MQTT_PREFIX || 'serverboy').replace(/\/$/, '');
-  const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
+const prefix = (process.env.MQTT_PREFIX || 'serverboy').replace(/\/$/, '');
+const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
 
-  const connectOptions = {
-    clientId: `serverboy-server-${process.pid}`,
-    clean: true,
-    reconnectPeriod: 1000,
-  };
-  if (envUsername) connectOptions.username = envUsername;
-  if (envPassword) connectOptions.password = envPassword;
-
-  const client = mqtt.connect(url, connectOptions);
-
+// initialize the MQTT client
+  const client = mqtt.connect(options);
   client.on('connect', () => {
-    console.log(`[serverboy][mqtt] connected to ${url}`);
+    console.log(`[serverboy][mqtt] connected to ${options.host}:${options.port}`);
     client.subscribe([
       `${prefix}/input/#`,
       `${prefix}/control/#`,

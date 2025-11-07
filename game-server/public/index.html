@@ -82,9 +82,20 @@
         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_SR });
         try {
           await audioCtx.audioWorklet.addModule('audio-worklet.js');
-          workletNode = new AudioWorkletNode(audioCtx, 'queue-player', { numberOfOutputs: 1, outputChannelCount: [1] });
+          workletNode = new AudioWorkletNode(
+            audioCtx,
+            'queue-player',
+            {
+              numberOfOutputs: 1,
+              outputChannelCount: [1],
+              channelCount: 1,
+              channelCountMode: 'explicit',
+              channelInterpretation: 'speakers',
+            }
+          );
           workletNode.connect(audioCtx.destination);
         } catch (_) {
+          console.warn('[serverboy][audio] AudioWorklet is unavailable, falling back to ScriptProcessor');
           // Fallback to ScriptProcessor if AudioWorklet is unavailable
           procNode = audioCtx.createScriptProcessor(2048, 0, 1);
           procNode.onaudioprocess = (e) => {
@@ -110,16 +121,73 @@
         document.getElementById('enable-audio').style.display = 'none';
       });
 
-      socket.on('audio', (samples) => {
-        // Expect either Float32Array or plain number[]
-        const f32 = (samples instanceof Float32Array)
-          ? samples
-          : Float32Array.from(samples, x => {
+      function normalizeToFloat32(samples) {
+        try {
+          // If we get a TypedArray view
+          if (ArrayBuffer.isView(samples)) {
+            if (samples instanceof Float32Array) return samples;
+            if (samples instanceof Int16Array) {
+              const out = new Float32Array(samples.length);
+              for (let i = 0; i < samples.length; i++) out[i] = samples[i] / 32768;
+              return out;
+            }
+            if (samples instanceof Uint8Array) {
+              const out = new Float32Array(samples.length);
+              for (let i = 0; i < samples.length; i++) out[i] = (samples[i] - 128) / 128;
+              return out;
+            }
+            // Generic numeric view
+            return Float32Array.from(samples, (x) => {
               const v = Number(x);
-              return isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
+              if (!isFinite(v)) return 0;
+              // Heuristic: values outside [-2,2] likely integer PCM; scale if int16 range
+              const av = Math.abs(v);
+              if (av > 2 && av <= 32768) return v / 32768;
+              if (av > 2 && av <= 255) return (v - 128) / 128;
+              return Math.max(-1, Math.min(1, v));
             });
+          }
+
+          // If we get raw ArrayBuffer (socket.io/binary)
+          if (samples instanceof ArrayBuffer) {
+            // Assume int16 PCM by default
+            const int16 = new Int16Array(samples);
+            const out = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) out[i] = int16[i] / 32768;
+            return out;
+          }
+
+          // If we get plain number[]
+          if (Array.isArray(samples)) {
+            // Heuristic scaling as above
+            return Float32Array.from(samples, (x) => {
+              const v = Number(x);
+              if (!isFinite(v)) return 0;
+              const av = Math.abs(v);
+              if (av > 2 && av <= 32768) return v / 32768;
+              if (av > 2 && av <= 255) return (v - 128) / 128;
+              return Math.max(-1, Math.min(1, v));
+            });
+          }
+        } catch (err) {
+          console.warn('[serverboy][audio] Failed to normalize audio samples:', err);
+        }
+        return new Float32Array(0);
+      }
+
+      socket.on('audio', (samples) => {
+        // Ensure audio graph exists so we don't drop early chunks
+        if (!audioCtx) ensureAudio();
+
+        const f32 = normalizeToFloat32(samples);
+        if (f32.length === 0) return;
+
         if (workletNode && workletNode.port) {
-          try { workletNode.port.postMessage({ buffer: f32.buffer }, [f32.buffer]); } catch (_) {}
+          try {
+            workletNode.port.postMessage({ buffer: f32.buffer }, [f32.buffer]);
+          } catch (err) {
+            console.warn('[serverboy][audio] Error posting message to AudioWorklet:', err);
+          }
         } else {
           audioQueue.push(f32);
         }

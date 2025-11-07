@@ -5,26 +5,31 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch via NPM",
+            "name": "NPM: start game-server",
             "request": "launch",
-            "runtimeArgs": [
-                "run-script",
-                "debug"
-            ],
+            "type": "node",
             "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "start"
+            ],
+            "cwd": "${workspaceFolder}/game-server",
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "type": "node"
+            "console": "internalConsole"
         },
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
+            "name": "Launch Game Server",
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/serverboy-server/index.js"
+            "program": "${workspaceFolder}/game-server/index.js",
+            "cwd": "${workspaceFolder}/game-server",
+            "runtimeExecutable": "node",
+            "console": "integratedTerminal"
         }
     ]
 }
