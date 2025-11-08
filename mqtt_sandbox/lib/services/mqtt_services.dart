@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:mqtt_sandbox/services/mqtt_env.dart';
 
 class FrameMeta {
   const FrameMeta({
@@ -18,16 +20,26 @@ class FrameMeta {
   final String format;
 }
 
-class MqttService {
+class MqttService extends ChangeNotifier {
+  late String _host;
+  late int _port;
+  late bool _useTLS;
+  late String? _username;
+  late String? _password;
+  late String _topicPrefix;
+  MqttService({MqttEnv? env}) {
+    if (env != null) {
+      _host = env.host;
+      _port = env.port;
+      _useTLS = env.tls;
+      _username = env.username.isEmpty ? null : env.username;
+      _password = env.password.isEmpty ? null : env.password;
+      _topicPrefix = env.prefix;
+    }
+  }
+
   MqttServerClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _subscription;
-
-  String _host = 'localhost';
-  int _port = 1883;
-  bool _useTLS = false;
-  String? _username;
-  String? _password;
-  String _topicPrefix = 'serverboy';
 
   final StreamController<bool> _connectionCtrl =
       StreamController<bool>.broadcast();
@@ -43,22 +55,46 @@ class MqttService {
   bool get isConnected =>
       _client?.connectionStatus?.state == MqttConnectionState.connected;
 
-  Future<void> connect({
-    required String host,
-    required int port,
-    required bool useTLS,
+  // Expose current/default configuration (initialized from env if provided)
+  String get defaultHost => _host;
+  int get defaultPort => _port;
+  bool get defaultUseTLS => _useTLS;
+  String get defaultUsername => _username ?? '';
+  String get defaultPassword => _password ?? '';
+  String get defaultTopicPrefix => _topicPrefix;
+
+  /// Update the MQTT configuration used by this service.
+  /// If currently connected, the caller should handle disconnect/reconnect.
+  void updateConfig({
+    String? host,
+    int? port,
+    bool? useTLS,
     String? username,
     String? password,
-    required String topicPrefix,
-  }) async {
-    if (isConnected) return;
+    String? topicPrefix,
+  }) {
+    if (host != null && host.isNotEmpty) {
+      _host = host;
+    }
+    if (port != null && port > 0) {
+      _port = port;
+    }
+    if (useTLS != null) {
+      _useTLS = useTLS;
+    }
+    if (username != null) {
+      _username = username.isEmpty ? null : username;
+    }
+    if (password != null) {
+      _password = password.isEmpty ? null : password;
+    }
+    if (topicPrefix != null) {
+      _topicPrefix = topicPrefix.replaceAll(RegExp(r'/+$'), '');
+    }
+  }
 
-    _host = host;
-    _port = port;
-    _useTLS = useTLS;
-    _username = (username != null && username.isEmpty) ? null : username;
-    _password = (password != null && password.isEmpty) ? null : password;
-    _topicPrefix = topicPrefix.replaceAll(RegExp(r'/+$'), '');
+  Future<void> connect() async {
+    if (isConnected) return;
 
     final clientId =
         'mqtt_viewer_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1 << 32)}';
@@ -70,6 +106,7 @@ class MqttService {
 
     client.onDisconnected = () {
       _connectionCtrl.add(false);
+      notifyListeners();
     };
 
     client.connectionMessage = MqttConnectMessage()
@@ -82,6 +119,8 @@ class MqttService {
     } catch (e) {
       client.disconnect();
       _connectionCtrl.add(false);
+      notifyListeners();
+      print('Connection failed: $e');
       rethrow;
     }
 
@@ -99,6 +138,7 @@ class MqttService {
 
     _client = client;
     _connectionCtrl.add(true);
+    notifyListeners();
   }
 
   void disconnect() {
@@ -107,8 +147,10 @@ class MqttService {
     _client?.disconnect();
     _client = null;
     _connectionCtrl.add(false);
+    notifyListeners();
   }
 
+  @override
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
@@ -118,17 +160,17 @@ class MqttService {
     _metaCtrl.close();
     _frameCtrl.close();
     _connectionCtrl.close();
+    super.dispose();
   }
 
-  void sendKey(String key, {required bool down}) {
+  void sendKey(int key, {required bool down}) {
     final client = _client;
     if (client == null ||
         client.connectionStatus?.state != MqttConnectionState.connected) {
       return;
     }
     final topic = '$_topicPrefix/input/${down ? 'keydown' : 'keyup'}';
-    final builder = MqttClientPayloadBuilder()
-      ..addUTF8String(key.toUpperCase());
+    final builder = MqttClientPayloadBuilder()..addUTF8String(key.toString());
     client.publishMessage(topic, MqttQos.atMostOnce, builder.payload!);
   }
 

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mqtt_sandbox/services/mqtt_services.dart';
 import 'package:mqtt_sandbox/services/mqtt_env.dart';
+import 'package:mqtt_sandbox/widgets/controls_grid.dart';
+import 'package:mqtt_sandbox/widgets/settings_dialog.dart';
 
 void main() {
   runApp(const ServerboyMqttApp());
@@ -16,15 +18,35 @@ class ServerboyMqttApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Provider<MqttService>(
-      create: (_) => MqttService(),
-      child: MaterialApp(
-        title: 'Serverboy MQTT Viewer',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        ),
-        home: const ViewerPage(),
-      ),
+    return FutureBuilder<MqttEnv>(
+      future: MqttEnv.load(),
+      builder: (context, snapshot) {
+        // Show a basic loading app while env loads
+        if (!snapshot.hasData) {
+          return MaterialApp(
+            title: 'Serverboy MQTT Viewer',
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+              scaffoldBackgroundColor: const Color(0xFFC2C2C2),
+            ),
+            home: const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+        final env = snapshot.data!;
+        return ChangeNotifierProvider<MqttService>(
+          create: (_) => MqttService(env: env),
+          child: MaterialApp(
+            title: 'Serverboy MQTT Viewer',
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+              scaffoldBackgroundColor: const Color(0xFFC2C2C2),
+            ),
+            home: const ViewerPage(),
+          ),
+        );
+      },
     );
   }
 }
@@ -79,19 +101,19 @@ class _ViewerPageState extends State<ViewerPage> {
   @override
   void initState() {
     super.initState();
-    // Load environment from assets/env.json (or overridden with --dart-define=ENV_FILE)
-    () async {
-      final env = await MqttEnv.load();
+    // Initialize defaults from the injected MqttService (which was created with env)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final svc = context.read<MqttService>();
       setState(() {
-        brokerHost = env.host;
-        brokerPort = env.port;
-        useTLS = env.tls;
-        username = env.username;
-        password = env.password;
-        topicPrefix = env.prefix;
+        brokerHost = svc.defaultHost;
+        brokerPort = svc.defaultPort;
+        useTLS = svc.defaultUseTLS;
+        username = svc.defaultUsername;
+        password = svc.defaultPassword;
+        topicPrefix = svc.defaultTopicPrefix;
       });
-    }();
+    });
     // Subscriptions are set up in a post-frame callback to ensure Provider is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final svc = context.read<MqttService>();
@@ -101,9 +123,9 @@ class _ViewerPageState extends State<ViewerPage> {
           _connected = connected;
           _connecting = false;
         });
-        _showSnack(connected
-            ? 'Connected to $brokerHost:$brokerPort'
-            : 'Disconnected');
+        _showSnack(
+          connected ? 'Connected to $brokerHost:$brokerPort' : 'Disconnected',
+        );
       });
       _metaSub = svc.metaStream.listen((meta) {
         if (!mounted) return;
@@ -120,6 +142,8 @@ class _ViewerPageState extends State<ViewerPage> {
         if (bytes.length < expected) return;
         _decodeAndSetFrame(bytes.sublist(0, expected));
       });
+      // Auto-connect on startup
+      _connect();
     });
   }
 
@@ -128,24 +152,13 @@ class _ViewerPageState extends State<ViewerPage> {
     setState(() => _connecting = true);
     final svc = context.read<MqttService>();
     try {
-      await svc.connect(
-        host: brokerHost,
-        port: brokerPort,
-        useTLS: useTLS,
-        username: username,
-        password: password,
-        topicPrefix: topicPrefix,
-      );
+      await svc.connect();
     } catch (e) {
       if (mounted) {
         setState(() => _connecting = false);
         _showSnack('MQTT connect failed: $e');
       }
     }
-  }
-
-  void _disconnect() {
-    context.read<MqttService>().disconnect();
   }
 
   // MQTT message handling moved into MqttService; UI now listens to service streams.
@@ -177,7 +190,7 @@ class _ViewerPageState extends State<ViewerPage> {
     }
   }
 
-  void _publishKey(String key, bool down) {
+  void _publishKey(int key, bool down) {
     context.read<MqttService>().sendKey(key, down: down);
   }
 
@@ -203,7 +216,6 @@ class _ViewerPageState extends State<ViewerPage> {
           ),
         ],
       ),
-      backgroundColor: const Color(0xFF111111),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -237,26 +249,9 @@ class _ViewerPageState extends State<ViewerPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              _ControlsGrid(
+              ControlsGrid(
                 onKeyDown: (k) => _publishKey(k, true),
                 onKeyUp: (k) => _publishKey(k, false),
-                onRestart: _publishRestart,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _connected ? _disconnect : _connect,
-                      icon: Icon(_connected ? Icons.link_off : Icons.link),
-                      label: Text(
-                        _connected
-                            ? 'Disconnect'
-                            : (_connecting ? 'Connecting…' : 'Connect'),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -266,214 +261,9 @@ class _ViewerPageState extends State<ViewerPage> {
   }
 
   Future<void> _openSettings() async {
-    final hostCtrl = TextEditingController(text: brokerHost);
-    final portCtrl = TextEditingController(text: brokerPort.toString());
-    final userCtrl = TextEditingController(text: username);
-    final passCtrl = TextEditingController(text: password);
-    final prefixCtrl = TextEditingController(text: topicPrefix);
-    bool tls = useTLS;
-
     await showDialog<void>(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('MQTT Settings'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Host'),
-                  controller: hostCtrl,
-                ),
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Port'),
-                  controller: portCtrl,
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Username'),
-                  controller: userCtrl,
-                ),
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  controller: passCtrl,
-                  obscureText: true,
-                ),
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Topic Prefix'),
-                  controller: prefixCtrl,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text('Use TLS'),
-                    const Spacer(),
-                    Switch(value: tls, onChanged: (v) => tls = v),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  brokerHost = hostCtrl.text.trim();
-                  brokerPort = int.tryParse(portCtrl.text.trim()) ?? brokerPort;
-                  username = userCtrl.text;
-                  password = passCtrl.text;
-                  topicPrefix = prefixCtrl.text.trim().replaceAll(
-                    RegExp(r'/+$'),
-                    '',
-                  );
-                  useTLS = tls;
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _ControlsGrid extends StatelessWidget {
-  const _ControlsGrid({
-    required this.onKeyDown,
-    required this.onKeyUp,
-    required this.onRestart,
-  });
-
-  final void Function(String key) onKeyDown;
-  final void Function(String key) onKeyUp;
-  final VoidCallback onRestart;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _ControlButton(
-              label: 'UP',
-              onDown: () => onKeyDown('UP'),
-              onUp: () => onKeyUp('UP'),
-            ),
-            const SizedBox(width: 8),
-            _ControlButton(
-              label: 'A',
-              onDown: () => onKeyDown('A'),
-              onUp: () => onKeyUp('A'),
-            ),
-            const SizedBox(width: 8),
-            _ControlButton(
-              label: 'B',
-              onDown: () => onKeyDown('B'),
-              onUp: () => onKeyUp('B'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _ControlButton(
-              label: 'LEFT',
-              onDown: () => onKeyDown('LEFT'),
-              onUp: () => onKeyUp('LEFT'),
-            ),
-            const SizedBox(width: 8),
-            _ControlButton(
-              label: 'DOWN',
-              onDown: () => onKeyDown('DOWN'),
-              onUp: () => onKeyUp('DOWN'),
-            ),
-            const SizedBox(width: 8),
-            _ControlButton(
-              label: 'RIGHT',
-              onDown: () => onKeyDown('RIGHT'),
-              onUp: () => onKeyUp('RIGHT'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: () => onKeyDown('START'),
-              onLongPress: null,
-              onHover: null,
-              child: const Text('START'),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => onKeyDown('SELECT'),
-              child: const Text('SELECT'),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(onPressed: onRestart, child: const Text('RESTART')),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ControlButton extends StatefulWidget {
-  const _ControlButton({
-    required this.label,
-    required this.onDown,
-    required this.onUp,
-  });
-
-  final String label;
-  final VoidCallback onDown;
-  final VoidCallback onUp;
-
-  @override
-  State<_ControlButton> createState() => _ControlButtonState();
-}
-
-class _ControlButtonState extends State<_ControlButton> {
-  bool _pressed = false;
-
-  void _handleDown() {
-    if (_pressed) return;
-    setState(() => _pressed = true);
-    widget.onDown();
-  }
-
-  void _handleUp() {
-    if (!_pressed) return;
-    setState(() => _pressed = false);
-    widget.onUp();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) => _handleDown(),
-      onPointerUp: (_) => _handleUp(),
-      onPointerCancel: (_) => _handleUp(),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 80),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: _pressed ? const Color(0xFF2A2A2A) : const Color(0xFF333333),
-          border: Border.all(color: const Color(0xFF444444)),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(widget.label, style: const TextStyle(color: Colors.white)),
-      ),
+      builder: (ctx) => const SettingsDialog(),
     );
   }
 }
