@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "mqtt_sandbox" "\0"
+            VALUE "FileDescription", "iot_gameboy" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "mqtt_sandbox" "\0"
+            VALUE "InternalName", "iot_gameboy" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "mqtt_sandbox.exe" "\0"
-            VALUE "ProductName", "mqtt_sandbox" "\0"
+            VALUE "OriginalFilename", "iot_gameboy.exe" "\0"
+            VALUE "ProductName", "iot_gameboy" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

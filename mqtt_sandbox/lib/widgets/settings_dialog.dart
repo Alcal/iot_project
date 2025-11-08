@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:mqtt_sandbox/services/mqtt_services.dart';
+import 'package:iot_gameboy/services/mqtt_services.dart';
 
 class SettingsDialog extends StatelessWidget {
   const SettingsDialog({super.key});

@@ -3,12 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:mqtt_sandbox/services/mqtt_services.dart';
-import 'package:mqtt_sandbox/services/mqtt_env.dart';
-import 'package:mqtt_sandbox/widgets/controls_grid.dart';
-import 'package:mqtt_sandbox/widgets/settings_dialog.dart';
-import 'package:mqtt_sandbox/widgets/game_screen.dart';
-import 'package:mqtt_sandbox/services/logger.dart';
+import 'package:iot_gameboy/services/mqtt_services.dart';
+import 'package:iot_gameboy/services/mqtt_env.dart';
+import 'package:iot_gameboy/widgets/controls_grid.dart';
+import 'package:iot_gameboy/widgets/settings_dialog.dart';
+import 'package:iot_gameboy/widgets/game_screen.dart';
+import 'package:iot_gameboy/services/logger.dart';
 
 void main() {
   log.init();

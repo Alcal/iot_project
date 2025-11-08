@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:mqtt_sandbox/services/logger.dart';
+import 'package:iot_gameboy/services/logger.dart';
 
 class MqttEnv {
   MqttEnv({
@@ -32,10 +32,12 @@ class MqttEnv {
       final contents = await rootBundle.loadString(_envOverridePath);
       jsonMap = json.decode(contents) as Map<String, dynamic>;
     } catch (e) {
-      log.i('ENV file not found or invalid at $_envOverridePath. Using defaults. ($e)');
+      log.i(
+        'ENV file not found or invalid at $_envOverridePath. Using defaults. ($e)',
+      );
     }
 
-    String host = (jsonMap['MQTT_HOST'] ?? 'localhost').toString();
+    String host = (jsonMap['MQTT_HOST'] ?? 'localhost').toString().trim();
     int port;
     final portRaw = jsonMap['MQTT_PORT'];
     if (portRaw is int) {

@@ -6,8 +6,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
-import 'package:mqtt_sandbox/services/mqtt_env.dart';
-import 'package:mqtt_sandbox/services/logger.dart';
+import 'package:iot_gameboy/services/mqtt_env.dart';
+import 'package:iot_gameboy/services/logger.dart';
 
 class FrameMeta {
   const FrameMeta({
