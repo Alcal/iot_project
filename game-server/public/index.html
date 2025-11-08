@@ -88,6 +88,61 @@
       const audioQueue = []; // fallback buffer
       const TARGET_SR = 44100;
 
+      function toU8(input) {
+        if (input == null) return null;
+        if (input instanceof Uint8Array) return input;
+        if (input instanceof ArrayBuffer) return new Uint8Array(input);
+        if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+        return null;
+      }
+
+      function decodeCompressedAudio(packet) {
+        try {
+          const buf = toU8(packet);
+          if (!buf || buf.length < 6) return null;
+          // Header: 'A'(0) version(1) fmt(2) ch(3) srLE(4..5)
+          if (buf[0] !== 0x41 || buf[1] !== 0x01) return null; // not our format
+          const fmt = buf[2];
+          const channels = buf[3];
+          const sampleRate = buf[4] | (buf[5] << 8);
+          if (fmt !== 0 || channels !== 1) return null; // only int16 mono supported
+          if (!window.pako || !window.pako.inflate) return null;
+          const body = buf.subarray(6);
+          const inflated = window.pako.inflate(body);
+          // Expect int16 PCM
+          if ((inflated.byteLength & 1) !== 0) return null;
+          const pcm16 = new Int16Array(inflated.buffer, inflated.byteOffset, inflated.byteLength >> 1);
+          const out = new Float32Array(pcm16.length);
+          for (let i = 0; i < pcm16.length; i++) out[i] = pcm16[i] / 32768;
+          // return both data and the src sample rate for resampling
+          return { data: out, sampleRate };
+        } catch (err) {
+          console.warn('[serverboy][audio] decodeCompressedAudio error:', err);
+          return null;
+        }
+      }
+
+      function resampleLinear(input, fromSR, toSR) {
+        try {
+          if (!input || input.length === 0 || !isFinite(fromSR) || !isFinite(toSR) || fromSR <= 0 || toSR <= 0) return new Float32Array(0);
+          if (fromSR === toSR) return input;
+          const ratio = toSR / fromSR;
+          const outLen = Math.max(1, Math.round(input.length * ratio));
+          const out = new Float32Array(outLen);
+          const step = (input.length - 1) / (outLen - 1);
+          for (let i = 0; i < outLen; i++) {
+            const pos = i * step;
+            const i0 = Math.floor(pos);
+            const i1 = Math.min(input.length - 1, i0 + 1);
+            const t = pos - i0;
+            out[i] = input[i0] * (1 - t) + input[i1] * t;
+          }
+          return out;
+        } catch (_) {
+          return input;
+        }
+      }
+
       async function ensureAudio() {
         if (audioCtx) return;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_SR });
@@ -190,7 +245,14 @@
         // Ensure audio graph exists so we don't drop early chunks
         if (!audioCtx) ensureAudio();
 
-        const f32 = normalizeToFloat32(samples);
+        const decoded = decodeCompressedAudio(samples);
+        let f32 = null;
+        if (decoded && decoded.data) {
+          const targetSR = audioCtx ? audioCtx.sampleRate : TARGET_SR;
+          f32 = resampleLinear(decoded.data, decoded.sampleRate, targetSR);
+        } else {
+          f32 = normalizeToFloat32(samples);
+        }
         if (f32.length === 0) return;
 
         if (workletNode && workletNode.port) {

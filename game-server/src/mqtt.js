@@ -63,13 +63,17 @@ const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
     publishFrame(client, prefix, screen);
   }
 
+  function publishAudioBound(audio) {
+    publishAudio(client, prefix, audio);
+  }
+
   function close() {
     try {
       client.end(true);
     } catch (_) {}
   }
 
-  return { client, publishFrame: publishFrameBound, close };
+  return { client, publishFrame: publishFrameBound, publishAudio: publishAudioBound, close };
 }
 
 module.exports = { createMqttClient };

@@ -1,5 +1,6 @@
 'use strict';
 const { encodeFrame } = require('./src/video');
+const { encodeAudio } = require('./src/audio');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
@@ -51,7 +52,14 @@ const { httpServer, io } = createServer();
     try {
       const audio = emulator.getAudio && emulator.getAudio();
       if (audio && audio.length) {
-        io.emit('audio', audio);
+        // Compress audio before sending
+        // Game Boy (Color) is mono; many emulators produce ~32.768 kHz. Allow override via env.
+        const AUDIO_SR = Number(process.env.AUDIO_SAMPLE_RATE || 32768);
+        const packet = encodeAudio(audio, { sampleRate: AUDIO_SR, channels: 1 });
+        io.emit('audio', packet);
+        if (mqttClient && typeof mqttClient.publishAudio === 'function') {
+          mqttClient.publishAudio(packet);
+        }
       }
     } catch (_) {}
   });

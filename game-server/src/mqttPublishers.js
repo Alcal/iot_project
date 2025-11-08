@@ -18,10 +18,17 @@ function publishFrame(client, prefix, screen) {
   client.publish(`${prefix}/frame`, buf, { qos: 0, retain: false });
 }
 
+function publishAudio(client, prefix, audio) {
+  if (!client || !client.connected || !audio) return;
+  const buf = Buffer.isBuffer(audio) ? audio : Buffer.from(audio);
+  client.publish(`${prefix}/audio`, buf, { qos: 0, retain: false });
+}
+
 module.exports = {
   publishMeta,
   publishHealth,
   publishFrame,
+  publishAudio,
 };
 
 
