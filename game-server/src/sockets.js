@@ -15,6 +15,10 @@ function attachInputHandlers(io, emulator) {
     socket.on('restart', () => {
       emulator.restart();
     });
+
+    socket.on('disconnect', () => {
+      // no-op
+    });
   });
 }
 

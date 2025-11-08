@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:mqtt_sandbox/services/logger.dart';
 
 class MqttEnv {
   MqttEnv({
@@ -30,8 +31,8 @@ class MqttEnv {
     try {
       final contents = await rootBundle.loadString(_envOverridePath);
       jsonMap = json.decode(contents) as Map<String, dynamic>;
-    } catch (_) {
-      // Fallback to defaults if file is missing or invalid
+    } catch (e) {
+      log.i('ENV file not found or invalid at $_envOverridePath. Using defaults. ($e)');
     }
 
     String host = (jsonMap['MQTT_HOST'] ?? 'localhost').toString();

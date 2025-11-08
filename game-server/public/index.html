@@ -37,14 +37,25 @@
     </div>
     <button id="enable-audio" style="position:fixed;top:8px;right:8px;">Enable Audio</button>
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js" integrity="sha512-g2TeAWw5GPnX7z0Kn8nFbYfeHcvAu/tx6d6mrLe/90mkCxO+RcptyYpksUz35EO337F83bZwcmUyHiHamspkfg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="video-decode.js"></script>
     <script>
       const socket = io();
       const canvas = document.getElementById('screen');
       const ctx = canvas.getContext('2d');
       const imageData = ctx.createImageData(160, 144);
+      
+      // No keyframe requests necessary; server always sends keyframes
 
-      socket.on('frame', (screen) => {
-        for (let i = 0; i < screen.length; i++) imageData.data[i] = screen[i];
+      socket.on('frame', (packet) => {
+        try {
+          const decoded = VideoCodec.decodeFrame(packet);
+          // Copy into ImageData
+          imageData.data.set(decoded);
+        } catch (err) {
+          console.warn('[serverboy][video] decode error:', err);
+          return;
+        }
         ctx.putImageData(imageData, 0, 0);
       });
 

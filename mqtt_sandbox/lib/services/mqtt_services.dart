@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:mqtt_sandbox/services/mqtt_env.dart';
+import 'package:mqtt_sandbox/services/logger.dart';
 
 class FrameMeta {
   const FrameMeta({
@@ -120,7 +121,7 @@ class MqttService extends ChangeNotifier {
       client.disconnect();
       _connectionCtrl.add(false);
       notifyListeners();
-      print('Connection failed: $e');
+      log.e('MQTT connection failed', e);
       rethrow;
     }
 
@@ -209,7 +210,7 @@ class MqttService extends ChangeNotifier {
             FrameMeta(width: width, height: height, format: format),
           );
         } catch (_) {
-          // ignore malformed meta
+          log.d('Ignoring malformed meta message on topic: $topic');
         }
         continue;
       }

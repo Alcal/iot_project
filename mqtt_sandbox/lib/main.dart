@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -8,9 +7,27 @@ import 'package:mqtt_sandbox/services/mqtt_services.dart';
 import 'package:mqtt_sandbox/services/mqtt_env.dart';
 import 'package:mqtt_sandbox/widgets/controls_grid.dart';
 import 'package:mqtt_sandbox/widgets/settings_dialog.dart';
+import 'package:mqtt_sandbox/widgets/game_screen.dart';
+import 'package:mqtt_sandbox/services/logger.dart';
 
 void main() {
-  runApp(const ServerboyMqttApp());
+  log.init();
+  FlutterError.onError = (details) {
+    log.flutterError(details);
+    FlutterError.presentError(details);
+  };
+  ui.PlatformDispatcher.instance.onError = (error, stack) {
+    log.safeError('Uncaught platform error', error, stack);
+    return true;
+  };
+  runZonedGuarded(
+    () {
+      runApp(const ServerboyMqttApp());
+    },
+    (error, stack) {
+      log.safeError('Uncaught zone error', error, stack);
+    },
+  );
 }
 
 class ServerboyMqttApp extends StatelessWidget {
@@ -59,61 +76,20 @@ class ViewerPage extends StatefulWidget {
 }
 
 class _ViewerPageState extends State<ViewerPage> {
-  // --- Connection settings (edit these for your broker) ---
-  String brokerHost = 'localhost';
-  int brokerPort = 1883; // 1883 (mqtt) or 8883 (mqtts)
-  bool useTLS = false; // set true for TLS if your broker requires it
-  String username = '';
-  String password = '';
-  String topicPrefix = 'serverboy';
-
   // --- Connection state ---
   StreamSubscription<bool>? _connSub;
-  StreamSubscription<FrameMeta>? _metaSub;
-  StreamSubscription<Uint8List>? _frameSub;
   bool _connecting = false;
   bool _connected = false;
 
-  // --- Frame/meta state ---
-  int _frameWidth = 160;
-  int _frameHeight = 144;
-  String _format = 'rgba8888';
-  ui.Image? _lastImage;
-
   @override
   void dispose() {
-    _disposeImage();
     _connSub?.cancel();
-    _metaSub?.cancel();
-    _frameSub?.cancel();
     super.dispose();
-  }
-
-  void _disposeImage() {
-    try {
-      // dispose is available on recent Flutter versions
-      // ignore: deprecated_member_use
-      _lastImage?.dispose();
-    } catch (_) {}
-    _lastImage = null;
   }
 
   @override
   void initState() {
     super.initState();
-    // Initialize defaults from the injected MqttService (which was created with env)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final svc = context.read<MqttService>();
-      setState(() {
-        brokerHost = svc.defaultHost;
-        brokerPort = svc.defaultPort;
-        useTLS = svc.defaultUseTLS;
-        username = svc.defaultUsername;
-        password = svc.defaultPassword;
-        topicPrefix = svc.defaultTopicPrefix;
-      });
-    });
     // Subscriptions are set up in a post-frame callback to ensure Provider is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final svc = context.read<MqttService>();
@@ -123,24 +99,6 @@ class _ViewerPageState extends State<ViewerPage> {
           _connected = connected;
           _connecting = false;
         });
-        _showSnack(
-          connected ? 'Connected to $brokerHost:$brokerPort' : 'Disconnected',
-        );
-      });
-      _metaSub = svc.metaStream.listen((meta) {
-        if (!mounted) return;
-        setState(() {
-          _frameWidth = meta.width;
-          _frameHeight = meta.height;
-          _format = meta.format;
-        });
-      });
-      _frameSub = svc.frameStream.listen((bytes) {
-        if (!mounted) return;
-        if (_format != 'rgba8888') return;
-        final expected = _frameWidth * _frameHeight * 4;
-        if (bytes.length < expected) return;
-        _decodeAndSetFrame(bytes.sublist(0, expected));
       });
       // Auto-connect on startup
       _connect();
@@ -161,41 +119,8 @@ class _ViewerPageState extends State<ViewerPage> {
     }
   }
 
-  // MQTT message handling moved into MqttService; UI now listens to service streams.
-
-  Future<void> _decodeAndSetFrame(Uint8List rgba) async {
-    final completer = Completer<ui.Image>();
-    try {
-      ui.decodeImageFromPixels(
-        rgba,
-        _frameWidth,
-        _frameHeight,
-        ui.PixelFormat.rgba8888,
-        (img) => completer.complete(img),
-      );
-      final img = await completer.future;
-      if (!mounted) {
-        // dispose if the widget is gone
-        try {
-          img.dispose();
-        } catch (_) {}
-        return;
-      }
-      _disposeImage();
-      setState(() {
-        _lastImage = img;
-      });
-    } catch (_) {
-      // ignore decode failures
-    }
-  }
-
   void _publishKey(int key, bool down) {
     context.read<MqttService>().sendKey(key, down: down);
-  }
-
-  void _publishRestart() {
-    context.read<MqttService>().sendRestart();
   }
 
   void _showSnack(String msg) {
@@ -222,32 +147,7 @@ class _ViewerPageState extends State<ViewerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: _frameWidth / _frameHeight,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        border: Border.all(color: const Color(0xFF333333)),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: _lastImage == null
-                          ? const Center(
-                              child: Text(
-                                'Waiting for frame...\nSubscribe to ${'meta'} and ${'frame'}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white70),
-                              ),
-                            )
-                          : FittedBox(
-                              fit: BoxFit.contain,
-                              child: RawImage(image: _lastImage),
-                            ),
-                    ),
-                  ),
-                ),
-              ),
+              Expanded(child: Center(child: const GameScreen())),
               const SizedBox(height: 12),
               ControlsGrid(
                 onKeyDown: (k) => _publishKey(k, true),

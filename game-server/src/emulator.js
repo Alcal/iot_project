@@ -33,7 +33,8 @@ function handleKeyUp(key) {
 
 function startLoop(onFrame) {
   let frames = 0;
-
+  let prevScreen = null;
+  let screen = null;
   const tick = () => {
     try {
       if (!gameboy) return setTimeout(tick, 5);
@@ -42,12 +43,12 @@ function startLoop(onFrame) {
         gameboy.pressKey(heldKey);
         heldKey = null;
       }
-
-      const screen = gameboy.doFrame();
+      prevScreen = screen;
+      screen = gameboy.doFrame();
 
       frames++;
       if ((frames & 1) === 0 && typeof onFrame === 'function') {
-        onFrame(screen);
+        onFrame(screen, prevScreen);
       }
     } catch (err) {
       console.error('Emulation error:', err);

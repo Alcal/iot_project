@@ -36,3 +36,17 @@ flutter run -d chrome
 ```
 
 You can still override settings at runtime via the in-app Settings dialog.
+
+## Logging
+
+The app uses a centralized logger (`lib/services/logger.dart`) based on the `logger` package.
+
+- In debug builds, logs at level DEBUG and above are printed with pretty formatting.
+- In release builds, logs default to INFO and above.
+- Uncaught Flutter and zone errors are captured and logged.
+
+To adjust verbosity at startup, edit `main()` and set the desired level:
+
+```dart
+log.init(level: Level.info); // or Level.debug, Level.warning, etc.
+```
