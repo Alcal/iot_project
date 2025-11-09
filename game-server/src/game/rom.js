@@ -9,7 +9,7 @@ function resolveRomPath() {
 
   const projectRoot = path.resolve(__dirname, '..');
 
-  const projectRom = path.join(projectRoot, 'roms/pokemon_silver.gbc');
+  const projectRom = path.join(projectRoot, '../roms/pokemon_silver.gbc');
   if (fs.existsSync(projectRom)) return projectRom;
 
   const packagedRom = path.join(projectRoot, 'node_modules/serverboy/roms/pokeyellow.gbc');

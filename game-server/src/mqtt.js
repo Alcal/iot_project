@@ -1,79 +1,47 @@
 'use strict';
 
-const mqtt = require('mqtt');
-const { publishMeta, publishHealth, publishFrame } = require('./mqttPublishers');
-const { handleInputKeydown, handleInputKeyup, handleControlRestart } = require('./mqttConsumers');
+const { createMqttClient: createMqttCoreClient } = require('./mqtt/mqtt_client');
+const { createConsumer } = require('./mqtt/consumer_utils');
+const createGameServerConsumers = require('./mqtt/consumer');
+const gameServerPublishers = require('./mqtt/publisher');
 
-function createMqttClient(emulator) {
-  // Build connection parameters from environment variables with sensible defaults
-  // Backward compatible: if MQTT_URL is provided, it takes precedence
-  const options = {
-    host: process.env.MQTT_HOST,
-    port: process.env.MQTT_PORT,
-    protocol: 'mqtts',
-    username: process.env.MQTT_USERNAME,
-    password: process.env.MQTT_PASSWORD
-}
-
-const prefix = (process.env.MQTT_PREFIX || 'serverboy').replace(/\/$/, '');
-const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
-
-// initialize the MQTT client
-  const client = mqtt.connect(options);
-  client.on('connect', () => {
-    console.log(`[serverboy][mqtt] connected to ${options.host}:${options.port}`);
-    client.subscribe([
-      `${prefix}/input/#`,
-      `${prefix}/control/#`,
-    ], (err) => {
-      if (err) console.error('[serverboy][mqtt] subscribe error:', err);
-    });
-
-    // Publish metadata once on connect
-    const meta = { width: 160, height: 144, format: 'rgba8888' };
-    publishMeta(client, prefix, meta, shouldRetainMeta);
-    publishHealth(client, prefix, { ok: true, ts: Date.now() });
-  });
-
-  client.on('error', (err) => {
-    console.error('[serverboy][mqtt] error:', err);
-  });
-
-  client.on('message', (topic, payloadBuffer) => {
+function createMqttClient(emulator, onInputActivity) {
+  const shouldRetainMeta = process.env.MQTT_RETAIN_META === 'true';
+  const consumers = createConsumer(createGameServerConsumers(emulator, onInputActivity));
+  let connection = null;
+  connection = createMqttCoreClient(consumers, gameServerPublishers, ({ client, publishers }) => {
     try {
-      const payload = payloadBuffer ? String(payloadBuffer) : '';
-      if (topic.endsWith('/input/keydown')) {
-        handleInputKeydown(emulator, payload);
-        return;
-      }
-      if (topic.endsWith('/input/keyup')) {
-        handleInputKeyup(emulator, payload);
-        return;
-      }
-      if (topic.endsWith('/control/restart')) {
-        handleControlRestart(emulator);
-        return;
-      }
-    } catch (err) {
-      console.error('[serverboy][mqtt] message handling error:', err);
-    }
+      const meta = { width: 160, height: 144, format: 'rgba8888' };
+      publishers.publishMeta(meta, shouldRetainMeta);
+      publishers.publishHealth({ ok: true, ts: Date.now() });
+    } catch (_) {}
   });
 
   function publishFrameBound(screen) {
-    publishFrame(client, prefix, screen);
+    try {
+      if (connection && connection.publishers && typeof connection.publishers.publishFrame === 'function') {
+        connection.publishers.publishFrame(screen);
+      }
+    } catch (_) {}
   }
 
   function publishAudioBound(audio) {
-    publishAudio(client, prefix, audio);
+    try {
+      if (connection && connection.publishers && typeof connection.publishers.publishAudio === 'function') {
+        connection.publishers.publishAudio(audio);
+      }
+    } catch (_) {}
   }
 
   function close() {
     try {
-      client.end(true);
+      if (connection && connection.client && typeof connection.client.end === 'function') {
+        connection.client.end(true);
+      }
     } catch (_) {}
   }
 
-  return { client, publishFrame: publishFrameBound, publishAudio: publishAudioBound, close };
+  return { client: connection && connection.client, publishFrame: publishFrameBound, publishAudio: publishAudioBound, close };
 }
 
 module.exports = { createMqttClient };

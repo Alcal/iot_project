@@ -54,9 +54,54 @@ function toInt16PcmMono(samples) {
   return new Int16Array(0);
 }
 
+function int16ToFloat32(pcm) {
+  const n = pcm ? pcm.length >>> 0 : 0;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = pcm[i] / 32768;
+  return out;
+}
+
+function float32ToInt16(f32) {
+  const n = f32 ? f32.length >>> 0 : 0;
+  const out = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    const v = Math.max(-1, Math.min(1, Number(f32[i]) || 0));
+    out[i] = (v * 32767) | 0;
+  }
+  return out;
+}
+
+function resampleLinearFloat32(input, fromSR, toSR) {
+  if (!input || !input.length || !isFinite(fromSR) || !isFinite(toSR) || fromSR <= 0 || toSR <= 0) {
+    return new Float32Array(0);
+  }
+  if (fromSR === toSR) return input;
+  const ratio = toSR / fromSR;
+  const outLen = Math.max(1, Math.round(input.length * ratio));
+  const out = new Float32Array(outLen);
+  if (outLen === 1) { out[0] = input[0]; return out; }
+  const step = (input.length - 1) / (outLen - 1);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * step;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(input.length - 1, i0 + 1);
+    const t = pos - i0;
+    out[i] = input[i0] * (1 - t) + input[i1] * t;
+  }
+  return out;
+}
+
 function encodeAudio(samples, options) {
-  const opts = Object.assign({ sampleRate: 44100, channels: 1 }, options || {});
+  const opts = Object.assign({ sampleRate: 44100, channels: 1, inputSampleRate: 0 }, options || {});
   const pcm = toInt16PcmMono(samples);
+  let pcmToEncode = pcm;
+
+  // Optional server-side resampling if input sample rate is provided and differs
+  if (opts.inputSampleRate && opts.inputSampleRate > 0 && opts.inputSampleRate !== opts.sampleRate) {
+    const f32 = int16ToFloat32(pcm);
+    const f32Resampled = resampleLinearFloat32(f32, opts.inputSampleRate, opts.sampleRate);
+    pcmToEncode = float32ToInt16(f32Resampled);
+  }
 
   // Header (6 bytes)
   const header = Buffer.allocUnsafe(6);
@@ -67,7 +112,7 @@ function encodeAudio(samples, options) {
   header.writeUInt16LE((opts.sampleRate >>> 0) & 0xffff, 4);
 
   // Body (zlib-deflated PCM)
-  const body = zlib.deflateSync(Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength), { level: 6 });
+  const body = zlib.deflateSync(Buffer.from(pcmToEncode.buffer, pcmToEncode.byteOffset, pcmToEncode.byteLength), { level: 6 });
   return Buffer.concat([header, body]);
 }
 

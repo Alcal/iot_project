@@ -1,0 +1,16 @@
+const createConsumer = (consumersDefintions) => {
+  const prefix = process.env.MQTT_PREFIX || 'serverboy';
+  const routes = {};
+  if (consumersDefintions && typeof consumersDefintions === 'object') {
+    Object.keys(consumersDefintions).forEach((topicAction) => {
+      routes[`${prefix}/${topicAction}`] = consumersDefintions[topicAction];
+    });
+  }
+  return routes;
+}
+
+module.exports = {
+  createConsumer,
+};
+
+
