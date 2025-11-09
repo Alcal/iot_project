@@ -52,11 +52,14 @@ class MqttService extends ChangeNotifier {
       StreamController<Uint8List>.broadcast();
   final StreamController<Uint8List> _audioCtrl =
       StreamController<Uint8List>.broadcast();
+  final StreamController<List<int>> _tallyCtrl =
+      StreamController<List<int>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionCtrl.stream;
   Stream<FrameMeta> get metaStream => _metaCtrl.stream;
   Stream<Uint8List> get frameStream => _frameCtrl.stream;
   Stream<Uint8List> get audioStream => _audioCtrl.stream;
+  Stream<List<int>> get tallyStream => _tallyCtrl.stream;
 
   bool get isConnected =>
       _client?.connectionStatus?.state == MqttConnectionState.connected;
@@ -144,6 +147,7 @@ class MqttService extends ChangeNotifier {
     client.subscribe('$_topicPrefix/meta', MqttQos.atMostOnce);
     client.subscribe('$_topicPrefix/frame', MqttQos.atMostOnce);
     client.subscribe('$_topicPrefix/audio', MqttQos.atMostOnce);
+    client.subscribe('$_topicPrefix/tally', MqttQos.atMostOnce);
 
     _subscription?.cancel();
     _subscription = client.updates?.listen(_handleUpdates);
@@ -172,6 +176,7 @@ class MqttService extends ChangeNotifier {
     _metaCtrl.close();
     _frameCtrl.close();
     _audioCtrl.close();
+    _tallyCtrl.close();
     _connectionCtrl.close();
     super.dispose();
   }
@@ -233,6 +238,20 @@ class MqttService extends ChangeNotifier {
       }
       if (topic.endsWith('/audio')) {
         _audioCtrl.add(bytes);
+        continue;
+      }
+      if (topic.endsWith('/tally')) {
+        try {
+          final decoded = json.decode(utf8.decode(bytes));
+          if (decoded is List) {
+            final list = decoded
+                .map((e) => e is int ? e : int.tryParse('$e') ?? 0)
+                .toList(growable: false);
+            _tallyCtrl.add(list);
+          }
+        } catch (_) {
+          log.d('Ignoring malformed tally message on topic: $topic');
+        }
         continue;
       }
     }

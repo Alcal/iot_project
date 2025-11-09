@@ -8,6 +8,7 @@ import 'package:iot_gameboy/services/mqtt_env.dart';
 import 'package:iot_gameboy/widgets/controls_grid.dart';
 import 'package:iot_gameboy/widgets/settings_dialog.dart';
 import 'package:iot_gameboy/widgets/game_screen.dart';
+import 'package:iot_gameboy/widgets/tally_graph.dart';
 import 'package:iot_gameboy/services/logger.dart';
 import 'package:iot_gameboy/services/audio_player.dart';
 
@@ -163,6 +164,8 @@ class _ViewerPageState extends State<ViewerPage> {
                 onKeyDown: (k) => _publishKey(k, true),
                 onKeyUp: (k) => _publishKey(k, false),
               ),
+              const SizedBox(height: 12),
+              const TallyGraph(),
             ],
           ),
         ),
