@@ -6,7 +6,7 @@ const MQTT_USERNAME = process.env.MQTT_USERNAME;
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD;
 const MQTT_PREFIX = process.env.MQTT_PREFIX || 'serverboy';
 const MQTT_PROTOCOL = process.env.MQTT_PROTOCOL || 'mqtts';
-const MQTT_KEEPALIVE = process.env.MQTT_KEEPALIVE ? Number(process.env.MQTT_KEEPALIVE) : 300;
+const MQTT_KEEPALIVE = process.env.MQTT_KEEPALIVE ? Number(process.env.MQTT_KEEPALIVE) : 0;
 
 function createMqttClient(consumers, publishers, cb) {
   console.log(`[game-server] Connecting to MQTT broker: ${MQTT_HOST}:${MQTT_PORT}`);

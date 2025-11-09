@@ -5,9 +5,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
-import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:iot_gameboy/services/mqtt_env.dart';
 import 'package:iot_gameboy/services/logger.dart';
+import 'package:iot_gameboy/services/mqtt_client_io.dart'
+    if (dart.library.html) 'package:iot_gameboy/services/mqtt_client_web.dart'
+    as mqtt_factory;
 
 class FrameMeta {
   const FrameMeta({
@@ -39,7 +41,7 @@ class MqttService extends ChangeNotifier {
     }
   }
 
-  MqttServerClient? _client;
+  MqttClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _subscription;
 
   final StreamController<bool> _connectionCtrl =
@@ -48,10 +50,13 @@ class MqttService extends ChangeNotifier {
       StreamController<FrameMeta>.broadcast();
   final StreamController<Uint8List> _frameCtrl =
       StreamController<Uint8List>.broadcast();
+  final StreamController<Uint8List> _audioCtrl =
+      StreamController<Uint8List>.broadcast();
 
   Stream<bool> get connectionStream => _connectionCtrl.stream;
   Stream<FrameMeta> get metaStream => _metaCtrl.stream;
   Stream<Uint8List> get frameStream => _frameCtrl.stream;
+  Stream<Uint8List> get audioStream => _audioCtrl.stream;
 
   bool get isConnected =>
       _client?.connectionStatus?.state == MqttConnectionState.connected;
@@ -97,13 +102,18 @@ class MqttService extends ChangeNotifier {
   Future<void> connect() async {
     if (isConnected) return;
 
+    // Use a safe upper bound for web (avoid 1 << 32 which may compile oddly)
+    final randomSuffix = Random().nextInt(0x7fffffff);
     final clientId =
-        'mqtt_viewer_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1 << 32)}';
-    final client = MqttServerClient.withPort(_host, clientId, _port);
+        'mqtt_viewer_${DateTime.now().microsecondsSinceEpoch}_${randomSuffix.toRadixString(36)}';
+    final client = mqtt_factory.createMqttClient(
+      host: _host,
+      port: _port,
+      clientId: clientId,
+      useTLS: _useTLS,
+    );
 
     client.logging(on: false);
-    client.secure = _useTLS;
-    client.keepAlivePeriod = 20;
 
     client.onDisconnected = () {
       _connectionCtrl.add(false);
@@ -133,6 +143,7 @@ class MqttService extends ChangeNotifier {
 
     client.subscribe('$_topicPrefix/meta', MqttQos.atMostOnce);
     client.subscribe('$_topicPrefix/frame', MqttQos.atMostOnce);
+    client.subscribe('$_topicPrefix/audio', MqttQos.atMostOnce);
 
     _subscription?.cancel();
     _subscription = client.updates?.listen(_handleUpdates);
@@ -160,6 +171,7 @@ class MqttService extends ChangeNotifier {
 
     _metaCtrl.close();
     _frameCtrl.close();
+    _audioCtrl.close();
     _connectionCtrl.close();
     super.dispose();
   }
@@ -172,7 +184,7 @@ class MqttService extends ChangeNotifier {
     }
     final topic = '$_topicPrefix/input/${down ? 'keydown' : 'keyup'}';
     final builder = MqttClientPayloadBuilder()..addUTF8String(key.toString());
-    client.publishMessage(topic, MqttQos.atMostOnce, builder.payload!);
+    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
   }
 
   void sendRestart() {
@@ -217,6 +229,10 @@ class MqttService extends ChangeNotifier {
 
       if (topic.endsWith('/frame')) {
         _frameCtrl.add(bytes);
+        continue;
+      }
+      if (topic.endsWith('/audio')) {
+        _audioCtrl.add(bytes);
         continue;
       }
     }

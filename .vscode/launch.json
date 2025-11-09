@@ -15,37 +15,10 @@
     {
       "type": "dart",
       "request": "launch",
-      "name": "Flutter: mqtt_sandbox",
+      "name": "Flutter: IOT Gameboy",
       "cwd": "${workspaceFolder}/mqtt_sandbox",
       "program": "lib/main.dart"
     },
-    {
-      "name": "NPM: start game-server",
-      "request": "launch",
-      "type": "node",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-          "run",
-          "start"
-      ],
-      "cwd": "${workspaceFolder}/game-server",
-      "skipFiles": [
-          "<node_internals>/**"
-      ],
-      "console": "internalConsole"
-  },
-  {
-      "type": "node",
-      "request": "launch",
-      "name": "Launch Game Server",
-      "skipFiles": [
-          "<node_internals>/**"
-      ],
-      "program": "${workspaceFolder}/game-server/index.js",
-      "cwd": "${workspaceFolder}/game-server",
-      "runtimeExecutable": "node",
-      "console": "integratedTerminal"
-  },
   {
       "type": "node",
       "request": "launch",
@@ -64,10 +37,19 @@
   ],
   "compounds": [
     {
-      "name": "Run: server + app",
+      "name": "Run: full stack",
       "configurations": [
         "Node: game-server",
-        "Flutter: mqtt_sandbox"
+        "Flutter: IOT Gameboy",
+        "Node: polling-server"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Run: backend only",
+      "configurations": [
+        "Node: game-server",
+        "Node: polling-server"
       ],
       "stopAll": true
     }

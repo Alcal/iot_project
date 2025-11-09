@@ -1,5 +1,5 @@
 // Basic MQTT server using same env vars as game-server
-
+const http = require('http');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const { createMqttClient } = require('./src/mqtt/mqtt_client');
@@ -51,6 +51,16 @@ let mqttConnection;
     });
   });
 })();
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Polling server is running\n');
+});
+
+server.listen(process.env.PORT, () => {
+  console.log(`Web server listening on port ${process.env.PORT}`);
+});
+
 
 
 process.on('SIGINT', () => {

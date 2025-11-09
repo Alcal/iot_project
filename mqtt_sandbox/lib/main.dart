@@ -9,6 +9,7 @@ import 'package:iot_gameboy/widgets/controls_grid.dart';
 import 'package:iot_gameboy/widgets/settings_dialog.dart';
 import 'package:iot_gameboy/widgets/game_screen.dart';
 import 'package:iot_gameboy/services/logger.dart';
+import 'package:iot_gameboy/services/audio_player.dart';
 
 void main() {
   log.init();
@@ -80,10 +81,12 @@ class _ViewerPageState extends State<ViewerPage> {
   StreamSubscription<bool>? _connSub;
   bool _connecting = false;
   bool _connected = false;
+  AudioPlayerService? _audioSvc;
 
   @override
   void dispose() {
     _connSub?.cancel();
+    _audioSvc?.stop();
     super.dispose();
   }
 
@@ -99,6 +102,13 @@ class _ViewerPageState extends State<ViewerPage> {
           _connected = connected;
           _connecting = false;
         });
+        // Start/stop audio on connection changes
+        if (connected) {
+          _audioSvc ??= AudioPlayerService(svc.audioStream);
+          _audioSvc!.start();
+        } else {
+          _audioSvc?.stop();
+        }
       });
       // Auto-connect on startup
       _connect();
