@@ -9,10 +9,11 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+env.json
 
-game-server/.env
-game-server/.env.*
-!game-server/.env.example
+**/.env.*
+!**/.env.example
+**/env.json
 
 # Logs
 logs/
@@ -22,13 +23,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-game-server/npm-debug.log*
-game-server/yarn-debug.log*
-game-server/yarn-error.log*
-game-server/pnpm-debug.log*
-
-# Node (game-server)
-game-server/node_modules/
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/pnpm-debug.log*
+ 
+# Nodeame-server)(g
+**/node_modules/
 
 # Coverage
 coverage/
